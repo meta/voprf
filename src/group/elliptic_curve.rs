@@ -6,21 +6,21 @@
 // of this source tree. You may select, at your option, one of the above-listed
 // licenses.
 
-use core::num::NonZeroU32;
 use core::ops::Add;
 
-use digest::core_api::BlockSizeUser;
+use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker};
 use elliptic_curve::group::cofactor::CofactorGroup;
-use elliptic_curve::hash2curve::{ExpandMsgXmd, FromOkm, GroupDigest};
-use elliptic_curve::sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint};
+use elliptic_curve::ops::Reduce;
+use elliptic_curve::sec1::{FromSec1Point, ModulusSize, ToSec1Point};
 use elliptic_curve::{
-    AffinePoint, Field, FieldBytes, FieldBytesSize, Group as _, ProjectivePoint, PublicKey, Scalar,
-    SecretKey,
+    AffinePoint, Field, FieldBytes, FieldBytesSize, Generate, Group as _, NonZeroScalar,
+    ProjectivePoint, PublicKey, Scalar, SecretKey,
 };
-use generic_array::typenum::{IsLess, IsLessOrEqual, Sum, U256};
-use generic_array::{ArrayLength, GenericArray};
-use rand_core::{TryCryptoRng, TryRngCore};
+use hash2curve::{ExpandMsgXmd, GroupDigest, MapToCurve};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, Sum, True, U2, U256};
+use hybrid_array::{Array, ArraySize};
+use rand_core::{TryCryptoRng, TryRng};
 
 use super::Group;
 use crate::{Error, InternalError, Result};
@@ -31,18 +31,19 @@ type ScalarLen<C> = FieldBytesSize<C>;
 impl<C> Group for C
 where
     C: GroupDigest,
-    ProjectivePoint<Self>: CofactorGroup + ToEncodedPoint<Self>,
+    <C as MapToCurve>::SecurityLevel: core::ops::Mul<U2>,
+    ProjectivePoint<Self>: CofactorGroup + ToSec1Point<Self>,
     ScalarLen<Self>: ModulusSize,
-    ScalarLen<Self>: ArrayLength,
-    AffinePoint<Self>: FromEncodedPoint<Self> + ToEncodedPoint<Self>,
-    Scalar<Self>: FromOkm,
+    ScalarLen<Self>: ArraySize + generic_array::ArrayLength,
+    AffinePoint<Self>: FromSec1Point<Self> + ToSec1Point<Self>,
+    Scalar<Self>: Reduce<Array<u8, <C as MapToCurve>::Length>>,
     // `VoprfClientLen`, `PoprfClientLen`, `VoprfServerLen`, `PoprfServerLen`
     ScalarLen<Self>: Add<ElemLen<Self>>,
-    Sum<ScalarLen<Self>, ElemLen<Self>>: ArrayLength,
+    Sum<ScalarLen<Self>, ElemLen<Self>>: ArraySize,
     // `ProofLen`
     ScalarLen<Self>: Add<ScalarLen<Self>>,
-    Sum<ScalarLen<Self>, ScalarLen<Self>>: ArrayLength,
-    ElemLen<Self>: ArrayLength,
+    Sum<ScalarLen<Self>, ScalarLen<Self>>: ArraySize,
+    ElemLen<Self>: ArraySize + generic_array::ArrayLength,
 {
     type Elem = ProjectivePoint<Self>;
 
@@ -52,23 +53,31 @@ where
 
     type ScalarLen = ScalarLen<Self>;
 
+    type SecurityLevel = <C as MapToCurve>::SecurityLevel;
+
     // Implements the `hash_to_curve()` function from
     // https://www.rfc-editor.org/rfc/rfc9380.html#section-3
     fn hash_to_curve<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Elem, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256> + IsLessOrEqual<H::BlockSize>,
+        H::OutputSize: IsLess<U256, Output = True>
+            + IsLessOrEqual<H::BlockSize, Output = True>
+            + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
-        Self::hash_from_bytes::<ExpandMsgXmd<H>>(input, dst).map_err(|_| InternalError::Input)
+        hash2curve::hash_from_bytes::<Self, ExpandMsgXmd<H>>(input, dst)
+            .map_err(|_| InternalError::Input)
     }
 
-    // Implements the `HashToScalar()` function
+    // Implements the `HashToScalar()` function from
+    // https://www.rfc-editor.org/rfc/rfc9497#section-4
     fn hash_to_scalar<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Scalar, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256> + IsLessOrEqual<H::BlockSize>,
+        H::OutputSize: IsLess<U256, Output = True>
+            + IsLessOrEqual<H::BlockSize, Output = True>
+            + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
-        <Self as GroupDigest>::hash_to_scalar::<ExpandMsgXmd<H>>(input, dst)
+        hash2curve::hash_to_scalar::<Self, ExpandMsgXmd<H>, <C as MapToCurve>::Length>(input, dst)
             .map_err(|_| InternalError::Input)
     }
 
@@ -80,10 +89,10 @@ where
         ProjectivePoint::<Self>::identity()
     }
 
-    fn serialize_elem(elem: Self::Elem) -> GenericArray<u8, Self::ElemLen> {
-        let bytes = elem.to_encoded_point(true);
+    fn serialize_elem(elem: Self::Elem) -> Array<u8, Self::ElemLen> {
+        let bytes = elem.to_sec1_point(true);
         let bytes = bytes.as_bytes();
-        let mut result = GenericArray::default();
+        let mut result = Array::default();
         result[..bytes.len()].copy_from_slice(bytes);
         result
     }
@@ -94,8 +103,10 @@ where
             .map_err(|_| Error::Deserialization)
     }
 
-    fn random_scalar<R: TryRngCore + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
-        Ok(*SecretKey::<Self>::random(&mut CompatRng(rng)).to_nonzero_scalar())
+    fn random_scalar<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
+        NonZeroScalar::<Self>::try_generate_from_rng(rng)
+            .map(|scalar| *scalar)
+            .map_err(|_| Error::Rng)
     }
 
     fn invert_scalar(scalar: Self::Scalar) -> Self::Scalar {
@@ -111,9 +122,9 @@ where
         Scalar::<Self>::ZERO
     }
 
-    fn serialize_scalar(scalar: Self::Scalar) -> GenericArray<u8, Self::ScalarLen> {
+    fn serialize_scalar(scalar: Self::Scalar) -> Array<u8, Self::ScalarLen> {
         let bytes: FieldBytes<Self> = scalar.into();
-        let mut result = GenericArray::<u8, Self::ScalarLen>::default();
+        let mut result = Array::<u8, Self::ScalarLen>::default();
         result.as_mut_slice().copy_from_slice(bytes.as_ref());
         result
     }
@@ -123,43 +134,4 @@ where
             .map(|secret_key| *secret_key.to_nonzero_scalar())
             .map_err(|_| Error::Deserialization)
     }
-}
-
-/// Adapter allowing `rand_core 0.9` RNGs to satisfy the `elliptic_curve` 0.13
-/// requirement for `rand_core 0.6` traits.
-///
-/// TODO #150: Remove this adapter when `elliptic_curve` migrates to `rand_core
-/// 0.9`.
-struct CompatRng<'a, R>(&'a mut R);
-
-impl<'a, R> elliptic_curve::rand_core::RngCore for CompatRng<'a, R>
-where
-    R: TryRngCore,
-{
-    fn next_u32(&mut self) -> u32 {
-        self.0.try_next_u32().expect("RNG failure")
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        self.0.try_next_u64().expect("RNG failure")
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.0
-            .try_fill_bytes(dest)
-            .expect("RNG failure while filling bytes");
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), elliptic_curve::rand_core::Error> {
-        self.0.try_fill_bytes(dest).map_err(|_| compat_error())?;
-        Ok(())
-    }
-}
-
-impl<'a, R> elliptic_curve::rand_core::CryptoRng for CompatRng<'a, R> where R: TryCryptoRng {}
-
-fn compat_error() -> elliptic_curve::rand_core::Error {
-    let code = NonZeroU32::new(elliptic_curve::rand_core::Error::CUSTOM_START)
-        .expect("CUSTOM_START must be non-zero");
-    elliptic_curve::rand_core::Error::from(code)
 }

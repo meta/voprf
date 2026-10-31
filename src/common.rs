@@ -14,9 +14,10 @@ use core::ops::Add;
 use derive_where::derive_where;
 use digest::{Digest, Output, OutputSizeUser};
 use generic_array::sequence::Concat;
-use generic_array::typenum::{IsLess, Unsigned, U2, U256, U9};
 use generic_array::{ArrayLength, GenericArray};
-use rand_core::{TryCryptoRng, TryRngCore};
+use hybrid_array::typenum::{IsLess, Unsigned, U2, U256, U9};
+use hybrid_array::{Array, ArraySize};
+use rand_core::{TryCryptoRng, TryRng};
 use subtle::ConstantTimeEq;
 
 #[cfg(feature = "serde")]
@@ -128,7 +129,7 @@ pub struct Proof<CS: CipherSuite> {
 
 /// Can only fail with [`Error::Batch`].
 #[allow(clippy::many_single_char_names)]
-pub(crate) fn generate_proof<CS: CipherSuite, R: TryRngCore + TryCryptoRng>(
+pub(crate) fn generate_proof<CS: CipherSuite, R: TryRng + TryCryptoRng>(
     rng: &mut R,
     k: <CS::Group as Group>::Scalar,
     a: <CS::Group as Group>::Elem,
@@ -419,7 +420,7 @@ pub(crate) fn hash_to_group<CS: CipherSuite>(
 pub(crate) fn server_evaluate_hash_input<CS: CipherSuite>(
     input: &[u8],
     info: Option<&[u8]>,
-    issued_element: GenericArray<u8, <<CS as CipherSuite>::Group as Group>::ElemLen>,
+    issued_element: Array<u8, <<CS as CipherSuite>::Group as Group>::ElemLen>,
 ) -> Result<Output<CS::Hash>> {
     // OPRF & VOPRF
     // hashInput = I2OSP(len(input), 2) || input ||
@@ -518,6 +519,6 @@ pub(crate) fn i2osp_2(input: usize) -> Result<[u8; 2], InternalError> {
         .map_err(|_| InternalError::I2osp)
 }
 
-pub(crate) fn i2osp_2_array<L: ArrayLength + IsLess<U256>>() -> GenericArray<u8, U2> {
+pub(crate) fn i2osp_2_array<L: ArraySize + IsLess<U256>>() -> Array<u8, U2> {
     L::U16.to_be_bytes().into()
 }

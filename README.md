@@ -21,7 +21,22 @@ voprf = "0.6.0-pre.1"
 
 ### Minimum Supported Rust Version
 
-Rust **1.85** or higher.
+Rust **1.87** or higher.
+
+### RustCrypto API migration
+
+The minimum `elliptic-curve` version is 0.14.3, requiring `crypto-bigint` 0.7.8
+or newer to address [RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html).
+This implementation uses `hash2curve` 0.14,
+`digest` 0.11 and `rand_core` 0.10. Primitive and serialized buffers use
+`hybrid_array::Array`; their byte encodings and RFC 9497 suite identifiers remain
+unchanged. Custom `Group` implementations specify their security level in bytes
+through `Group::SecurityLevel`, matching the hash-to-curve parameters.
+
+Random generators implement `TryRng` and `TryCryptoRng`. Randomness failures return
+`Error::Rng` for both Ristretto255 and the NIST curves, without producing a scalar.
+Cargo's MSRV-aware resolver selects dependency releases compatible with the
+declared Rust version.
 
 Contributors
 ------------

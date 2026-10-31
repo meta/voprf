@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+Require `elliptic-curve` 0.14.3, which requires the patched `crypto-bigint` 0.7.8
+or newer and removes the dependency affected by RUSTSEC-2026-0387. Raise the
+MSRV to Rust 1.87 for this stack.
+Migrate to the RustCrypto 0.14 ecosystem, including `digest` 0.11,
+`rand_core`/`rand` 0.10, `curve25519-dalek` 5 and SHA-2 0.11. Replace the old RNG
+adapter with fallible scalar generation and retain the existing RFC 9497 vectors
+and serialized bytes. See the README for the public type changes.
+
 ## 0.6.0-pre.1 (April 6, 2026)
 * MSRV bumped to 1.85
 * Updated rand_core dependency to 0.9

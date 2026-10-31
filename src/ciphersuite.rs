@@ -8,19 +8,21 @@
 
 //! Defines the CipherSuite trait to specify the underlying primitives for VOPRF
 
-use digest::core_api::BlockSizeUser;
+use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker, OutputSizeUser};
-use elliptic_curve::VoprfParameters;
-use generic_array::typenum::{IsLess, IsLessOrEqual, U256};
-use generic_array::ArrayLength;
+use hash2curve::{ExpandMsg, OprfParameters};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, True, U2, U256};
+use hybrid_array::ArraySize;
 
 use crate::Group;
 
 /// Configures the underlying primitives used in VOPRF
 pub trait CipherSuite
 where
-    <Self::Hash as OutputSizeUser>::OutputSize:
-        ArrayLength + IsLess<U256> + IsLessOrEqual<<Self::Hash as BlockSizeUser>::BlockSize>,
+    <Self::Hash as OutputSizeUser>::OutputSize: ArraySize
+        + IsLess<U256, Output = True>
+        + IsLessOrEqual<<Self::Hash as BlockSizeUser>::BlockSize, Output = True>
+        + IsGreaterOrEqual<Prod<<Self::Group as Group>::SecurityLevel, U2>, Output = True>,
 {
     /// The ciphersuite identifier as dictated by
     /// <https://www.rfc-editor.org/rfc/rfc9497>
@@ -35,16 +37,31 @@ where
     type Hash: BlockSizeUser + Default + FixedOutput + HashMarker;
 }
 
-impl<T: VoprfParameters> CipherSuite for T
+/// Preserve string suite identifiers while adapting RustCrypto's byte
+/// constants. Invalid UTF-8 is rejected during associated-constant evaluation.
+const fn suite_id(id: &'static [u8]) -> &'static str {
+    match core::str::from_utf8(id) {
+        Ok(id) => id,
+        Err(_) => panic!("RustCrypto suite identifiers must be UTF-8"),
+    }
+}
+
+type OprfHash<T> = <<T as hash2curve::GroupDigest>::ExpandMsg as ExpandMsg<
+    <T as hash2curve::MapToCurve>::SecurityLevel,
+>>::Hash;
+
+impl<T: OprfParameters> CipherSuite for T
 where
     T: Group,
-    T::Hash: BlockSizeUser + Default + FixedOutput + HashMarker,
-    <T::Hash as OutputSizeUser>::OutputSize:
-        ArrayLength + IsLess<U256> + IsLessOrEqual<<T::Hash as BlockSizeUser>::BlockSize>,
+    OprfHash<T>: BlockSizeUser + Default + FixedOutput + HashMarker,
+    <OprfHash<T> as OutputSizeUser>::OutputSize: ArraySize
+        + IsLess<U256, Output = True>
+        + IsLessOrEqual<<OprfHash<T> as BlockSizeUser>::BlockSize, Output = True>
+        + IsGreaterOrEqual<Prod<<T as Group>::SecurityLevel, U2>, Output = True>,
 {
-    const ID: &'static str = T::ID;
+    const ID: &'static str = suite_id(<T as OprfParameters>::ID);
 
     type Group = T;
 
-    type Hash = T::Hash;
+    type Hash = OprfHash<T>;
 }

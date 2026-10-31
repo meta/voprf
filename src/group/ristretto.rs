@@ -6,16 +6,20 @@
 // of this source tree. You may select, at your option, one of the above-listed
 // licenses.
 
+use core::num::NonZeroU16;
+
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
-use digest::core_api::BlockSizeUser;
+use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker};
-use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
-use generic_array::typenum::{IsLess, IsLessOrEqual, U256, U32, U64};
-use generic_array::GenericArray;
-use rand_core::{TryCryptoRng, TryRngCore};
+use hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
+use hybrid_array::typenum::{
+    IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, True, U16, U2, U256, U32,
+};
+use hybrid_array::Array;
+use rand_core::{TryCryptoRng, TryRng};
 use subtle::ConstantTimeEq;
 
 use super::Group;
@@ -34,6 +38,23 @@ impl crate::CipherSuite for Ristretto255 {
     type Hash = sha2::Sha512;
 }
 
+/// `expand_message_xmd` to 64 uniform bytes, the input of both the
+/// ristretto255 element map and the wide scalar reduction.
+fn expand_64<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<[u8; 64], InternalError>
+where
+    H: BlockSizeUser + Default + FixedOutput + HashMarker,
+    H::OutputSize:
+        IsLessOrEqual<H::BlockSize, Output = True> + IsGreaterOrEqual<Prod<U16, U2>, Output = True>,
+{
+    const LEN: NonZeroU16 = NonZeroU16::new(64).unwrap();
+    let mut uniform_bytes = [0u8; 64];
+    <ExpandMsgXmd<H> as ExpandMsg<U16>>::expand_message(input, dst, LEN)
+        .map_err(|_| InternalError::Input)?
+        .fill_bytes(&mut uniform_bytes)
+        .map_err(|_| InternalError::Input)?;
+    Ok(uniform_bytes)
+}
+
 impl Group for Ristretto255 {
     type Elem = RistrettoPoint;
 
@@ -43,19 +64,21 @@ impl Group for Ristretto255 {
 
     type ScalarLen = U32;
 
+    // ristretto255 targets the 128-bit security level (RFC 9380 appendix B).
+    type SecurityLevel = U16;
+
     // Implements the `hash_to_ristretto255()` function from
     // https://www.rfc-editor.org/rfc/rfc9380.html#appendix-B
     fn hash_to_curve<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Elem, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256> + IsLessOrEqual<H::BlockSize>,
+        H::OutputSize: IsLess<U256, Output = True>
+            + IsLessOrEqual<H::BlockSize, Output = True>
+            + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
-        let mut uniform_bytes = GenericArray::<_, U64>::default();
-        ExpandMsgXmd::<H>::expand_message(input, dst, 64)
-            .map_err(|_| InternalError::Input)?
-            .fill_bytes(&mut uniform_bytes);
-
-        Ok(RistrettoPoint::from_uniform_bytes(&uniform_bytes.into()))
+        Ok(RistrettoPoint::from_uniform_bytes(&expand_64::<H>(
+            input, dst,
+        )?))
     }
 
     // Implements the `HashToScalar()` function from
@@ -63,14 +86,13 @@ impl Group for Ristretto255 {
     fn hash_to_scalar<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Scalar, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256> + IsLessOrEqual<H::BlockSize>,
+        H::OutputSize: IsLess<U256, Output = True>
+            + IsLessOrEqual<H::BlockSize, Output = True>
+            + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
-        let mut uniform_bytes = GenericArray::<_, U64>::default();
-        ExpandMsgXmd::<H>::expand_message(input, dst, 64)
-            .map_err(|_| InternalError::Input)?
-            .fill_bytes(&mut uniform_bytes);
-
-        Ok(Scalar::from_bytes_mod_order_wide(&uniform_bytes.into()))
+        Ok(Scalar::from_bytes_mod_order_wide(&expand_64::<H>(
+            input, dst,
+        )?))
     }
 
     fn base_elem() -> Self::Elem {
@@ -82,7 +104,7 @@ impl Group for Ristretto255 {
     }
 
     // serialization of a group element
-    fn serialize_elem(elem: Self::Elem) -> GenericArray<u8, Self::ElemLen> {
+    fn serialize_elem(elem: Self::Elem) -> Array<u8, Self::ElemLen> {
         elem.compress().to_bytes().into()
     }
 
@@ -94,7 +116,7 @@ impl Group for Ristretto255 {
             .ok_or(Error::Deserialization)
     }
 
-    fn random_scalar<R: TryRngCore + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
+    fn random_scalar<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
         loop {
             let mut scalar_bytes = [0u8; 32];
             rng.try_fill_bytes(&mut scalar_bytes)
@@ -119,7 +141,7 @@ impl Group for Ristretto255 {
         Scalar::ZERO
     }
 
-    fn serialize_scalar(scalar: Self::Scalar) -> GenericArray<u8, Self::ScalarLen> {
+    fn serialize_scalar(scalar: Self::Scalar) -> Array<u8, Self::ScalarLen> {
         scalar.to_bytes().into()
     }
 

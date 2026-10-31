@@ -56,3 +56,37 @@ fn test_zero_scalar_error<G: Group>() -> Result<()> {
 
     Ok(())
 }
+
+struct FailingRng;
+
+impl rand_core::TryRng for FailingRng {
+    type Error = core::fmt::Error;
+
+    fn try_next_u32(&mut self) -> core::result::Result<u32, Self::Error> {
+        Err(core::fmt::Error)
+    }
+
+    fn try_next_u64(&mut self) -> core::result::Result<u64, Self::Error> {
+        Err(core::fmt::Error)
+    }
+
+    fn try_fill_bytes(&mut self, _: &mut [u8]) -> core::result::Result<(), Self::Error> {
+        Err(core::fmt::Error)
+    }
+}
+
+impl rand_core::TryCryptoRng for FailingRng {}
+
+/// Randomness failures return no scalar for any supported group.
+#[test]
+fn test_random_scalar_rng_failure() {
+    fn rejects_failure<G: Group>() {
+        assert!(matches!(G::random_scalar(&mut FailingRng), Err(Error::Rng)));
+    }
+
+    rejects_failure::<p256::NistP256>();
+    rejects_failure::<p384::NistP384>();
+    rejects_failure::<p521::NistP521>();
+    #[cfg(feature = "ristretto255")]
+    rejects_failure::<crate::Ristretto255>();
+}
