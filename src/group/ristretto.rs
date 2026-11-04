@@ -15,11 +15,9 @@ use curve25519_dalek::traits::Identity;
 use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker};
 use hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
-use hybrid_array::typenum::{
-    IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, True, U16, U2, U256, U32,
-};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLessOrEqual, Prod, True, U16, U2, U32};
 use hybrid_array::Array;
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 use subtle::ConstantTimeEq;
 
 use super::Group;
@@ -72,8 +70,7 @@ impl Group for Ristretto255 {
     fn hash_to_curve<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Elem, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
         Ok(RistrettoPoint::from_uniform_bytes(&expand_64::<H>(
@@ -86,8 +83,7 @@ impl Group for Ristretto255 {
     fn hash_to_scalar<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Scalar, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
         Ok(Scalar::from_bytes_mod_order_wide(&expand_64::<H>(
@@ -116,7 +112,7 @@ impl Group for Ristretto255 {
             .ok_or(Error::Deserialization)
     }
 
-    fn random_scalar<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
+    fn random_scalar<R: TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
         loop {
             let mut scalar_bytes = [0u8; 32];
             rng.try_fill_bytes(&mut scalar_bytes)

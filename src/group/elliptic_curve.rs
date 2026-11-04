@@ -18,9 +18,9 @@ use elliptic_curve::{
     ProjectivePoint, PublicKey, Scalar, SecretKey,
 };
 use hash2curve::{ExpandMsgXmd, GroupDigest, MapToCurve};
-use hybrid_array::typenum::{IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, Sum, True, U2, U256};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLessOrEqual, Prod, Sum, True, U2};
 use hybrid_array::{Array, ArraySize};
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 
 use super::Group;
 use crate::{Error, InternalError, Result};
@@ -34,7 +34,6 @@ where
     <C as MapToCurve>::SecurityLevel: core::ops::Mul<U2>,
     ProjectivePoint<Self>: CofactorGroup + ToSec1Point<Self>,
     ScalarLen<Self>: ModulusSize,
-    ScalarLen<Self>: ArraySize + generic_array::ArrayLength,
     AffinePoint<Self>: FromSec1Point<Self> + ToSec1Point<Self>,
     Scalar<Self>: Reduce<Array<u8, <C as MapToCurve>::Length>>,
     // `VoprfClientLen`, `PoprfClientLen`, `VoprfServerLen`, `PoprfServerLen`
@@ -43,7 +42,7 @@ where
     // `ProofLen`
     ScalarLen<Self>: Add<ScalarLen<Self>>,
     Sum<ScalarLen<Self>, ScalarLen<Self>>: ArraySize,
-    ElemLen<Self>: ArraySize + generic_array::ArrayLength,
+    ElemLen<Self>: ArraySize,
 {
     type Elem = ProjectivePoint<Self>;
 
@@ -60,8 +59,7 @@ where
     fn hash_to_curve<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Elem, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
         hash2curve::hash_from_bytes::<Self, ExpandMsgXmd<H>>(input, dst)
@@ -73,8 +71,7 @@ where
     fn hash_to_scalar<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Scalar, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>,
     {
         hash2curve::hash_to_scalar::<Self, ExpandMsgXmd<H>, <C as MapToCurve>::Length>(input, dst)
@@ -103,7 +100,7 @@ where
             .map_err(|_| Error::Deserialization)
     }
 
-    fn random_scalar<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
+    fn random_scalar<R: TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar> {
         NonZeroScalar::<Self>::try_generate_from_rng(rng)
             .map(|scalar| *scalar)
             .map_err(|_| Error::Rng)

@@ -16,9 +16,9 @@ use core::ops::{Add, Mul, Sub};
 
 use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker};
-use hybrid_array::typenum::{IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, Sum, True, U2, U256};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLessOrEqual, Prod, Sum, True, Unsigned, U2};
 use hybrid_array::{Array, ArraySize};
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 #[cfg(feature = "ristretto255")]
 pub use ristretto::Ristretto255;
 use subtle::{Choice, ConstantTimeEq};
@@ -36,9 +36,6 @@ where
     // `ProofLen`
     Self::ScalarLen: Add<Self::ScalarLen>,
     Sum<Self::ScalarLen, Self::ScalarLen>: ArraySize,
-    // `expand_message_xmd` needs a hash of at least twice the security level
-    // (RFC 9380 section 5.3.1).
-    Self::SecurityLevel: core::ops::Mul<U2>,
 {
     /// The type of group elements
     type Elem: ConstantTimeEq
@@ -48,7 +45,7 @@ where
         + for<'a> Mul<&'a Self::Scalar, Output = Self::Elem>;
 
     /// The byte length necessary to represent group elements
-    type ElemLen: ArraySize + generic_array::ArrayLength + 'static;
+    type ElemLen: ArraySize + 'static;
 
     /// The type of base field scalars
     type Scalar: ConstantTimeEq
@@ -59,11 +56,17 @@ where
         + for<'a> Sub<&'a Self::Scalar, Output = Self::Scalar>;
 
     /// The byte length necessary to represent scalars
-    type ScalarLen: ArraySize + generic_array::ArrayLength + 'static;
+    type ScalarLen: ArraySize + 'static;
 
     /// The target security level in bytes
     /// (<https://www.rfc-editor.org/rfc/rfc9380.html#section-8.9>).
-    type SecurityLevel;
+    ///
+    /// The output size of the hash function used by
+    /// [`hash_to_curve()`](Self::hash_to_curve) and
+    /// [`hash_to_scalar()`](Self::hash_to_scalar) must be at least twice this
+    /// value, as required by
+    /// <https://www.rfc-editor.org/rfc/rfc9380.html#section-5.3.1>.
+    type SecurityLevel: Unsigned + Mul<U2>;
 
     /// Transforms a password and domain separation tag (DST) into a curve point
     ///
@@ -73,8 +76,7 @@ where
     fn hash_to_curve<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Elem, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>;
 
     /// Hashes a slice of pseudo-random bytes to a scalar
@@ -85,8 +87,7 @@ where
     fn hash_to_scalar<H>(input: &[&[u8]], dst: &[&[u8]]) -> Result<Self::Scalar, InternalError>
     where
         H: BlockSizeUser + Default + FixedOutput + HashMarker,
-        H::OutputSize: IsLess<U256, Output = True>
-            + IsLessOrEqual<H::BlockSize, Output = True>
+        H::OutputSize: IsLessOrEqual<H::BlockSize, Output = True>
             + IsGreaterOrEqual<Prod<Self::SecurityLevel, U2>, Output = True>;
 
     /// Get the base point for the group
@@ -115,7 +116,7 @@ where
     ///
     /// # Errors
     /// [`Error::Rng`](crate::Error::Rng) if the random number generator fails.
-    fn random_scalar<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar>;
+    fn random_scalar<R: TryCryptoRng>(rng: &mut R) -> Result<Self::Scalar>;
 
     /// The multiplicative inverse of this scalar
     fn invert_scalar(scalar: Self::Scalar) -> Self::Scalar;

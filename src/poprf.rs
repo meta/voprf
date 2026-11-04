@@ -16,7 +16,7 @@ use derive_where::derive_where;
 use digest::{Digest, Output, OutputSizeUser};
 use hybrid_array::typenum::Unsigned;
 use hybrid_array::{Array, ArraySize};
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 
 use crate::common::{
     derive_keypair, deterministic_blind_unchecked, generate_proof, hash_to_group, i2osp_2,
@@ -75,7 +75,7 @@ impl<CS: CipherSuite> PoprfClient<CS> {
     ///
     /// # Errors
     /// [`Error::Input`] if the `input` is empty or longer than [`u16::MAX`].
-    pub fn blind<R: TryRng + TryCryptoRng>(
+    pub fn blind<R: TryCryptoRng>(
         input: &[u8],
         blinding_factor_rng: &mut R,
     ) -> Result<PoprfClientBlindResult<CS>> {
@@ -189,7 +189,7 @@ impl<CS: CipherSuite> PoprfServer<CS> {
     ///
     /// # Errors
     /// [`Error::Protocol`] if the protocol fails and can't be completed.
-    pub fn new<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self> {
+    pub fn new<R: TryCryptoRng>(rng: &mut R) -> Result<Self> {
         let mut seed = Array::<_, <CS::Group as Group>::ScalarLen>::default();
         rng.try_fill_bytes(&mut seed).map_err(|_| Error::Protocol)?;
 
@@ -235,7 +235,7 @@ impl<CS: CipherSuite> PoprfServer<CS> {
     /// # Errors
     /// - [`Error::Info`] if the `info` is longer than `u16::MAX`.
     /// - [`Error::Protocol`] if the protocol fails and can't be completed.
-    pub fn blind_evaluate<R: TryRng + TryCryptoRng>(
+    pub fn blind_evaluate<R: TryCryptoRng>(
         &self,
         rng: &mut R,
         blinded_element: &BlindedElement<CS>,
@@ -273,7 +273,7 @@ impl<CS: CipherSuite> PoprfServer<CS> {
     /// - [`Error::Info`] if the `info` is longer than `u16::MAX`.
     /// - [`Error::Protocol`] if the protocol fails and can't be completed.
     #[cfg(feature = "alloc")]
-    pub fn batch_blind_evaluate<'a, R: TryRng + TryCryptoRng, IE>(
+    pub fn batch_blind_evaluate<'a, R: TryCryptoRng, IE>(
         &self,
         rng: &mut R,
         blinded_elements: &'a IE,
@@ -346,7 +346,7 @@ impl<CS: CipherSuite> PoprfServer<CS> {
     pub fn batch_blind_evaluate_finish<
         'a,
         'b,
-        R: TryRng + TryCryptoRng,
+        R: TryCryptoRng,
         IB: Iterator<Item = &'a BlindedElement<CS>> + ExactSizeIterator,
         IE,
     >(
@@ -569,7 +569,7 @@ fn compute_tweaked_key<CS: CipherSuite>(
     let info_len = i2osp_2(info.len()).map_err(|_| Error::Info)?;
     let framed_info = [STR_INFO.as_slice(), &info_len, info];
 
-    let dst = Dst::new::<CS, _, _>(STR_HASH_TO_SCALAR, Mode::Poprf);
+    let dst = Dst::new::<CS, _>(STR_HASH_TO_SCALAR, Mode::Poprf);
     // This can't fail, the size of the `input` is known.
     let m = CS::Group::hash_to_scalar::<CS::Hash>(&framed_info, &dst.as_dst()).unwrap();
 
@@ -602,7 +602,7 @@ fn compute_tweak<CS: CipherSuite>(
     let info_len = i2osp_2(info.len()).map_err(|_| Error::Info)?;
     let framed_info = [STR_INFO.as_slice(), &info_len, info];
 
-    let dst = Dst::new::<CS, _, _>(STR_HASH_TO_SCALAR, Mode::Poprf);
+    let dst = Dst::new::<CS, _>(STR_HASH_TO_SCALAR, Mode::Poprf);
     // This can't fail, the size of the `input` is known.
     let m = CS::Group::hash_to_scalar::<CS::Hash>(&framed_info, &dst.as_dst()).unwrap();
 
@@ -747,7 +747,7 @@ mod tests {
     ) -> Output<CS::Hash> {
         let t = compute_tweak::<CS>(key, Some(info)).unwrap();
 
-        let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, mode);
+        let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, mode);
         let point = CS::Group::hash_to_curve::<CS::Hash>(&[input], &dst.as_dst()).unwrap();
 
         // evaluatedElement = G.ScalarInverse(t) * blindedElement
@@ -793,7 +793,7 @@ mod tests {
             .blind_evaluate(&mut rng, &client_blind_result.message, Some(info))
             .unwrap();
         let wrong_pk = {
-            let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, Mode::Oprf);
+            let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, Mode::Oprf);
             // Choose a group element that is unlikely to be the right public
             // key
             CS::Group::hash_to_curve::<CS::Hash>(&[b"msg"], &dst.as_dst()).unwrap()

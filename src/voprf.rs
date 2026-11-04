@@ -16,7 +16,7 @@ use derive_where::derive_where;
 use digest::{Digest, Output};
 use hybrid_array::typenum::Unsigned;
 use hybrid_array::Array;
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 
 use crate::common::{
     derive_keypair, deterministic_blind_unchecked, generate_proof, hash_to_group, i2osp_2,
@@ -75,7 +75,7 @@ impl<CS: CipherSuite> VoprfClient<CS> {
     ///
     /// # Errors
     /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`].
-    pub fn blind<R: TryRng + TryCryptoRng>(
+    pub fn blind<R: TryCryptoRng>(
         input: &[u8],
         blinding_factor_rng: &mut R,
     ) -> Result<VoprfClientBlindResult<CS>> {
@@ -196,7 +196,7 @@ impl<CS: CipherSuite> VoprfServer<CS> {
     ///
     /// # Errors
     /// [`Error::Protocol`] if the protocol fails and can't be completed.
-    pub fn new<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self> {
+    pub fn new<R: TryCryptoRng>(rng: &mut R) -> Result<Self> {
         let mut seed = Array::<_, <CS::Group as Group>::ScalarLen>::default();
         rng.try_fill_bytes(&mut seed).map_err(|_| Error::Protocol)?;
         // This can't fail as the hash output is type constrained.
@@ -238,7 +238,7 @@ impl<CS: CipherSuite> VoprfServer<CS> {
     /// Computes the second step for the multiplicative blinding version of
     /// DH-OPRF. This message is sent from the server (who holds the OPRF key)
     /// to the client.
-    pub fn blind_evaluate<R: TryRng + TryCryptoRng>(
+    pub fn blind_evaluate<R: TryCryptoRng>(
         &self,
         rng: &mut R,
         blinded_element: &BlindedElement<CS>,
@@ -271,7 +271,7 @@ impl<CS: CipherSuite> VoprfServer<CS> {
     /// [`Error::Batch`] if the number of `blinded_elements` and
     /// `evaluation_elements` don't match or is longer then [`u16::MAX`]
     #[cfg(feature = "alloc")]
-    pub fn batch_blind_evaluate<'a, R: TryRng + TryCryptoRng, I>(
+    pub fn batch_blind_evaluate<'a, R: TryCryptoRng, I>(
         &self,
         rng: &mut R,
         blinded_elements: &'a I,
@@ -322,7 +322,7 @@ impl<CS: CipherSuite> VoprfServer<CS> {
     pub fn batch_blind_evaluate_finish<
         'a,
         'b,
-        R: TryRng + TryCryptoRng,
+        R: TryCryptoRng,
         IB: Iterator<Item = &'a BlindedElement<CS>> + ExactSizeIterator,
         IE,
     >(
@@ -551,6 +551,7 @@ mod tests {
     use ::alloc::vec;
     use ::alloc::vec::Vec;
     use rand::rngs::SysRng;
+    use rand::TryRng;
 
     use super::*;
     use crate::common::{Dst, STR_HASH_TO_GROUP};
@@ -561,7 +562,7 @@ mod tests {
         key: <CS::Group as Group>::Scalar,
         mode: Mode,
     ) -> Output<CS::Hash> {
-        let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, mode);
+        let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, mode);
         let point = CS::Group::hash_to_curve::<CS::Hash>(&[input], &dst.as_dst()).unwrap();
 
         let res = point * &key;
@@ -662,7 +663,7 @@ mod tests {
             .unwrap();
         let messages: Vec<_> = messages.collect();
         let wrong_pk = {
-            let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, Mode::Oprf);
+            let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, Mode::Oprf);
             // Choose a group element that is unlikely to be the right public
             // key
             CS::Group::hash_to_curve::<CS::Hash>(&[b"msg"], &dst.as_dst()).unwrap()
@@ -679,7 +680,7 @@ mod tests {
         let server = VoprfServer::<CS>::new(&mut rng).unwrap();
         let server_result = server.blind_evaluate(&mut rng, &client_blind_result.message);
         let wrong_pk = {
-            let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, Mode::Oprf);
+            let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, Mode::Oprf);
             // Choose a group element that is unlikely to be the right public
             // key
             CS::Group::hash_to_curve::<CS::Hash>(&[b"msg"], &dst.as_dst()).unwrap()

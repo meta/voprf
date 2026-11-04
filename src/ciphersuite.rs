@@ -11,7 +11,7 @@
 use digest::block_api::BlockSizeUser;
 use digest::{FixedOutput, HashMarker, OutputSizeUser};
 use hash2curve::{ExpandMsg, OprfParameters};
-use hybrid_array::typenum::{IsGreaterOrEqual, IsLess, IsLessOrEqual, Prod, True, U2, U256};
+use hybrid_array::typenum::{IsGreaterOrEqual, IsLessOrEqual, Prod, True, U2};
 use hybrid_array::ArraySize;
 
 use crate::Group;
@@ -20,7 +20,6 @@ use crate::Group;
 pub trait CipherSuite
 where
     <Self::Hash as OutputSizeUser>::OutputSize: ArraySize
-        + IsLess<U256, Output = True>
         + IsLessOrEqual<<Self::Hash as BlockSizeUser>::BlockSize, Output = True>
         + IsGreaterOrEqual<Prod<<Self::Group as Group>::SecurityLevel, U2>, Output = True>,
 {
@@ -55,7 +54,6 @@ where
     T: Group,
     OprfHash<T>: BlockSizeUser + Default + FixedOutput + HashMarker,
     <OprfHash<T> as OutputSizeUser>::OutputSize: ArraySize
-        + IsLess<U256, Output = True>
         + IsLessOrEqual<<OprfHash<T> as BlockSizeUser>::BlockSize, Output = True>
         + IsGreaterOrEqual<Prod<<T as Group>::SecurityLevel, U2>, Output = True>,
 {

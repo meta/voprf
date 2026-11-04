@@ -21,7 +21,7 @@ voprf = "0.6.0-pre.1"
 
 ### Minimum Supported Rust Version
 
-Rust **1.87** or higher.
+Rust **1.88** or higher.
 
 ### RustCrypto API migration
 
@@ -33,7 +33,7 @@ This implementation uses `hash2curve` 0.14,
 unchanged. Custom `Group` implementations specify their security level in bytes
 through `Group::SecurityLevel`, matching the hash-to-curve parameters.
 
-Random generators implement `TryRng` and `TryCryptoRng`. Randomness failures return
+Random generators implement `TryCryptoRng`. Randomness failures return
 `Error::Rng` for both Ristretto255 and the NIST curves, without producing a scalar.
 Cargo's MSRV-aware resolver selects dependency releases compatible with the
 declared Rust version.

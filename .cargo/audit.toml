@@ -1,7 +1,0 @@
-[advisories]
-# TODO: remove once voprf moves to elliptic-curve 0.14 (see #159).
-# RUSTSEC-2026-0387: crypto-bigint 0.5 (pulled in by elliptic-curve 0.13) has
-# timing variability in operations intended to be constant-time. There is no
-# patched 0.5.x release; the fix requires elliptic-curve 0.14 (crypto-bigint
-# 0.7.8+).
-ignore = ["RUSTSEC-2026-0387"]

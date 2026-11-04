@@ -1,14 +1,40 @@
 # Changelog
 
 ## Unreleased
+Migrate to the RustCrypto 0.14 / `hybrid-array` ecosystem (thanks to
+[nbari](https://github.com/nbari) for #159). This removes the dependency on
+`crypto-bigint` 0.5 affected by
+[RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html). RFC 9497
+test vectors and serialized bytes are unchanged.
 
-Require `elliptic-curve` 0.14.3, which requires the patched `crypto-bigint` 0.7.8
-or newer and removes the dependency affected by RUSTSEC-2026-0387. Raise the
-MSRV to Rust 1.87 for this stack.
-Migrate to the RustCrypto 0.14 ecosystem, including `digest` 0.11,
-`rand_core`/`rand` 0.10, `curve25519-dalek` 5 and SHA-2 0.11. Replace the old RNG
-adapter with fallible scalar generation and retain the existing RFC 9497 vectors
-and serialized bytes. See the README for the public type changes.
+* MSRV bumped to 1.88
+* Updated elliptic-curve dependency to 0.14.3 (requiring the patched crypto-bigint
+  0.7.8 or newer), and added the hash2curve 0.14 dependency (hash-to-curve and the
+  OPRF curve parameters moved to this crate)
+* Updated digest dependency to 0.11
+* Updated curve25519-dalek dependency to 5
+* Updated rand_core dependency to 0.10 and rand dev-dependency to 0.10
+  (thanks to [asterized](https://github.com/asterized) for #157)
+* Updated sha2 dependency to 0.11 and p256/p384/p521 dev-dependencies to 0.14
+* Replaced generic-array with hybrid-array 0.4: public APIs now use
+  `hybrid_array::Array` instead of `GenericArray`, and `Group::ElemLen` and
+  `Group::ScalarLen` are `hybrid_array::ArraySize`
+* RNG bounds changed from `TryRngCore + TryCryptoRng` to `TryCryptoRng`. The
+  internal `CompatRng` adapter has been removed (resolves #150), so randomness
+  failures return `Error::Rng` for the NIST curves too, instead of panicking
+* Added `Group::SecurityLevel: Unsigned + Mul<U2>`, the target security level in
+  bytes; the hash used by `Group::hash_to_curve()` and
+  `Group::hash_to_scalar()` (and `CipherSuite::Hash`) must now output at least
+  twice this many bytes, as required by RFC 9380
+* The `CipherSuite` where clause changed: it no longer requires `IsLess<U256>`
+  on the hash output size, and now requires
+  `IsLessOrEqual<BlockSize, Output = True>` plus
+  `IsGreaterOrEqual<Prod<<Self::Group as Group>::SecurityLevel, U2>, Output = True>`.
+  Downstream code that repeats these bounds (e.g. opaque-ke) must be updated
+* The blanket `CipherSuite` implementation is now for curves implementing
+  `hash2curve::OprfParameters` (replacing `elliptic_curve::VoprfParameters`)
+* Parts of this migration were adapted from the `sid-voprf` crate of the
+  [structured-id/sid](https://github.com/structured-id/sid) project
 
 ## 0.6.0-pre.1 (April 6, 2026)
 * MSRV bumped to 1.85

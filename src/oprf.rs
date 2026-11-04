@@ -14,7 +14,7 @@ use derive_where::derive_where;
 use digest::{Digest, Output};
 use hybrid_array::typenum::Unsigned;
 use hybrid_array::Array;
-use rand_core::{TryCryptoRng, TryRng};
+use rand_core::TryCryptoRng;
 
 use crate::common::{
     derive_key_internal, deterministic_blind_unchecked, hash_to_group, i2osp_2,
@@ -73,7 +73,7 @@ impl<CS: CipherSuite> OprfClient<CS> {
     ///
     /// # Errors
     /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`].
-    pub fn blind<R: TryRng + TryCryptoRng>(
+    pub fn blind<R: TryCryptoRng>(
         input: &[u8],
         blinding_factor_rng: &mut R,
     ) -> Result<OprfClientBlindResult<CS>> {
@@ -146,7 +146,7 @@ impl<CS: CipherSuite> OprfServer<CS> {
     ///
     /// # Errors
     /// [`Error::Protocol`] if the protocol fails and can't be completed.
-    pub fn new<R: TryRng + TryCryptoRng>(rng: &mut R) -> Result<Self> {
+    pub fn new<R: TryCryptoRng>(rng: &mut R) -> Result<Self> {
         let mut seed = Array::<_, <CS::Group as Group>::ScalarLen>::default();
         rng.try_fill_bytes(&mut seed).map_err(|_| Error::Protocol)?;
         Self::new_from_seed(&seed, &[])
@@ -280,7 +280,7 @@ mod tests {
         info: &[u8],
         mode: Mode,
     ) -> Output<CS::Hash> {
-        let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, mode);
+        let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, mode);
         let point = CS::Group::hash_to_curve::<CS::Hash>(&[input], &dst.as_dst()).unwrap();
 
         let res = point * &key;
@@ -312,7 +312,7 @@ mod tests {
             .finalize(&input, &EvaluationElement(client_blind_result.message.0))
             .unwrap();
 
-        let dst = Dst::new::<CS, _, _>(STR_HASH_TO_GROUP, Mode::Oprf);
+        let dst = Dst::new::<CS, _>(STR_HASH_TO_GROUP, Mode::Oprf);
         let point = CS::Group::hash_to_curve::<CS::Hash>(&[&input], &dst.as_dst()).unwrap();
         let res2 = finalize_after_unblind::<CS, _, _>(iter::once((input.as_ref(), point)), &[])
             .next()
