@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0-pre.2 (November 5, 2026)
 Migrate to the RustCrypto 0.14 / `hybrid-array` ecosystem (thanks to
 [nbari](https://github.com/nbari) for #159). This removes the dependency on
 `crypto-bigint` 0.5 affected by

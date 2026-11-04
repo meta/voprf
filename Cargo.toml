@@ -10,7 +10,7 @@ readme = "README.md"
 repository = "https://github.com/facebook/voprf/"
 resolver = "3"
 rust-version = "1.88"
-version = "0.6.0-pre.1"
+version = "0.6.0-pre.2"
 
 [features]
 alloc = []
