@@ -73,7 +73,8 @@ impl<CS: CipherSuite> OprfClient<CS> {
     /// DH-OPRF.
     ///
     /// # Errors
-    /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`].
+    /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`], or
+    /// if it hashes to the identity element.
     pub fn blind<R: TryCryptoRng>(
         input: &[u8],
         blinding_factor_rng: &mut R,
@@ -92,7 +93,8 @@ impl<CS: CipherSuite> OprfClient<CS> {
     /// on the validity of the blinding factor!
     ///
     /// # Errors
-    /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`].
+    /// [`Error::Input`] if the `input` is empty or longer then [`u16::MAX`], or
+    /// if it hashes to the identity element.
     #[cfg(any(feature = "danger", test))]
     pub fn deterministic_blind_unchecked(
         input: &[u8],

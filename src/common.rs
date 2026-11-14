@@ -401,6 +401,12 @@ pub(crate) fn deterministic_blind_unchecked<CS: CipherSuite>(
     mode: Mode,
 ) -> Result<<CS::Group as Group>::Elem> {
     let hashed_point = hash_to_group::<CS>(input, mode)?;
+
+    // Identity element would nullify blinding (RFC 9497, Section 3.3.1)
+    if CS::Group::is_identity_elem(hashed_point).into() {
+        return Err(Error::Input);
+    }
+
     Ok(hashed_point * blind)
 }
 
